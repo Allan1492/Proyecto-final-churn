@@ -83,3 +83,16 @@ class CleaningService:
         elif method == "mode":
             self.df[col] = self.df[col].fillna(self.df[col].mode()[0])
         return self.df
+
+class ModelService:
+    """ Esta clase es la que 'mueve las perillas' """
+    def __init__(self, df):
+        self.df = df
+
+    def entrenar_modelo(self, nombre_modelo, params):
+        # Aquí es donde se aplican los hiperparámetros de models.py
+        if nombre_modelo == "Random Forest Classifier":
+            from sklearn.ensemble import RandomForestClassifier
+            modelo = RandomForestClassifier(**params)
+            # Lógica de entrenamiento aquí...
+            return modelo

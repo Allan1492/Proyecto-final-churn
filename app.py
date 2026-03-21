@@ -1,162 +1,187 @@
 import streamlit as st
 import pandas as pd
-from eda import EDAService, VisualizationService
+# Importamos los servicios del Framework
+from eda import VisualizationService as FrameworkMineria 
 from generator import DataManager, CleaningService
 from models import ALL_MODELS, MODEL_PARAMS
 from predictor import Predictor
 
+# ─── CONFIGURACIÓN DE PÁGINA (Tema 4: GUI) ───────────────────────────────────
+st.set_page_config(
+    page_title="Framework Minería Avanzada - ULead", 
+    layout="wide", 
+    page_icon="📊"
+)
 
-st.set_page_config(page_title="Predicción de Deserción de Clientes (Churn) mediante Analítica y Machine Learning", layout="wide", page_icon="📊")
+# Inyección de CSS para mejorar la legibilidad del menú lateral
+st.markdown("""
+    <style>
+        /* Tamaño de las opciones del radio button en el sidebar */
+        [data-testid="stSidebarNav"] span, .st-emotion-cache-1647z7l {
+            font-size: 20px !important;
+            font-weight: 600 !important;
+            margin-bottom: 8px !important;
+        }
+        /* Título de la sección de navegación */
+        [data-testid="stWidgetLabel"] p {
+            font-size: 22px !important;
+            color: #FF4B4B !important;
+            font-weight: bold !important;
+        }
+        /* Estilo para los tabs */
+        .stTabs [data-baseweb="tab"] p {
+            font-size: 18px !important;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
-# ─── ESTADO INICIAL ──────────────────────────────────────────────────────────
+# ─── ESTADO DE LA SESIÓN ─────────────────────────────────────────────────────
 if "data_manager" not in st.session_state:
     st.session_state.data_manager = DataManager()
 if "show_new_dataset_modal" not in st.session_state:
     st.session_state.show_new_dataset_modal = False
+if "selected_models" not in st.session_state:
+    st.session_state.selected_models = []
 
 dm = st.session_state.data_manager
 df = dm.get_data()
 
-# ─── FUNCIONES AUXILIARES ────────────────────────────────────────────────────
+# ─── FUNCIONES DE NAVEGACIÓN Y CARGA ─────────────────────────────────────────
 def load_new_dataset(file):
-    """Carga un nuevo dataset y resetea el estado"""
+    """Procesa la carga de un nuevo archivo limpiando estados previos"""
     if file:
-        st.session_state.data_manager = DataManager()
+        # 1. Actualizar el DataManager
         st.session_state.data_manager.load_data(file)
-        st.session_state.show_new_dataset_modal = False
+        
+        # 2. Resetear selecciones para evitar conflictos de dimensiones
         st.session_state.selected_models = []
-        st.success("✅ Dataset cargado exitosamente!")
+        st.session_state.show_new_dataset_modal = False
+        
+        # 3. Limpiar parámetros viejos del session_state
+        keys_to_del = [k for k in st.session_state.keys() if "Classifier_" in k or "Regressor_" in k]
+        for k in keys_to_del:
+            del st.session_state[k]
+            
+        st.toast("✅ Dataset cargado con éxito", icon="🚀")
         st.rerun()
-    else:
-        st.error("❌ Selecciona un archivo CSV")
 
-def render_dataset_info(df):
-    """Muestra información compacta del dataset"""
-    if df is not None:
-        st.caption(f"📄 {df.shape[0]} filas × {df.shape[1]} columnas")
-
+# ─── RENDERIZADO DE PANTALLAS ────────────────────────────────────────────────
 def render_eda(df):
-    """Renderiza la sección de EDA"""
     if df is None:
-        st.info("👆 Carga un dataset desde el sidebar para comenzar")
-        with st.expander("📂 O cargar aquí"):
-            if uploaded := st.file_uploader("Sube un CSV", type=["csv"], key="eda_uploader"):
-                dm.load_data(uploaded)
-                st.rerun()
+        st.header("📂 Carga de Datos")
+        st.info("Bienvenido. Por favor, sube un archivo CSV para activar las funciones del Framework.")
+        archivo = st.file_uploader("Subir Dataset", type=["csv"], key="init_uploader")
+        if archivo: load_new_dataset(archivo)
         return
 
-    eda, cleaner, viz = EDAService(df), CleaningService(df), VisualizationService(df)
+    miner = FrameworkMineria(df)
+    cleaner = CleaningService(df)
     
-    # Diagnóstico
-    st.subheader("🩺 Diagnóstico")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Filas", df.shape[0]); c2.metric("Columnas", df.shape[1]); c3.metric("Duplicados", eda.duplicated_count())
+    st.subheader("🩺 Diagnóstico de Calidad")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Registros", df.shape[0])
+    c2.metric("Variables", df.shape[1])
+    c3.metric("Duplicados", miner.duplicated_count())
+    c4.metric("% Nulos", f"{miner.null_percentage().mean():.2f}%")
     
-    # Limpieza interactiva
-    with st.expander("🧹 Limpieza", expanded=False):
-        if eda.duplicated_count() > 0 and st.button("Eliminar duplicados"):
-            dm.update_data(cleaner.remove_duplicates()); st.rerun()
-        if cols := st.multiselect("🗑️ Columnas a eliminar", df.columns):
-            dm.update_data(cleaner.drop_columns(cols)); st.rerun()
-        if num_cols := eda.numeric_columns():
-            col, method = st.columns(2)
-            with col: c = st.selectbox("Imputar", num_cols); m = st.selectbox("Método", ["mean","median","mode"])
-            if st.button("Aplicar imputación"): dm.update_data(cleaner.fill_nulls(c, m)); st.rerun()
+    t1, t2, t3 = st.tabs(["📊 Visualización", "🧪 Minería Avanzada", "📂 Explorador"])
     
-    # Control de versiones
-    with st.expander("🔄 Historial"):
-        c1, c2, c3 = st.columns(3)
-        if c1.button("⬅ Undo"): dm.undo(); st.rerun()
-        if c2.button("➡ Redo"): dm.redo(); st.rerun()
-        if c3.button("🔄 Reset"): dm.reset_to_original() and st.success("Restablecido"); st.rerun()
-    
-    # Visualizaciones
-    with st.expander("📈 Visualizaciones", expanded=True):
-        if eda.numeric_columns():
-            nc = st.selectbox("Variable numérica", eda.numeric_columns(), key="num_viz")
-            st.plotly_chart(viz.histogram(nc), use_container_width=True)
-            st.plotly_chart(viz.boxplot(nc), use_container_width=True)
-        if eda.categorical_columns():
-            cc = st.selectbox("Variable categórica", eda.categorical_columns(), key="cat_viz")
-            st.plotly_chart(viz.bar_chart(cc), use_container_width=True)
-        st.plotly_chart(viz.correlation_heatmap(), use_container_width=True)
-    
-    # Dataset y descarga
-    with st.expander("💾 Dataset actual", expanded=False):
+    with t1:
+        cols = miner.numeric_columns()
+        if cols:
+            var = st.selectbox("Variable para análisis", cols)
+            ca, cb = st.columns(2)
+            ca.plotly_chart(miner.histogram(var), use_container_width=True)
+            cb.plotly_chart(miner.boxplot(var), use_container_width=True)
+            st.plotly_chart(miner.correlation_heatmap(), use_container_width=True)
+
+    with t2:
+        st.subheader("Detección de Anomalías (Tema 7)")
+        cont = st.slider("Porcentaje de Contaminación", 0.01, 0.20, 0.05)
+        if st.button("Ejecutar Isolation Forest"):
+            miner.deteccionAnomalias(contaminacion=cont)
+            st.success("Anomalías marcadas en el dataset.")
+            st.dataframe(df.head(10))
+
+    with t3:
         st.dataframe(df, use_container_width=True)
-        csv = df.to_csv(index=False).encode('utf-8')
-        c1, c2 = st.columns([1, 3])
-        c1.download_button("📥 CSV", csv, "dataset_actualizado.csv", "text/csv", use_container_width=True)
-        c2.info(f"Memoria: {df.memory_usage(deep=True).sum()/1024**2:.2f} MB")
 
 def render_model_selection():
-    """Renderiza selección de modelos"""
     if df is None:
-        st.warning("⚠️ Carga un dataset primero"); return
-    all_models = [m for v in ALL_MODELS.values() for m in v]
-    st.session_state.selected_models = st.multiselect("🤖 Selecciona modelos", all_models, help="Puedes elegir varios para comparar")
+        st.warning("⚠️ Cargue datos primero")
+        return
+    
+    st.subheader("🎯 Definición del Objetivo")
+    tipo = st.radio("¿Qué tipo de problema desea resolver?", 
+                    ["Clasificación", "Regresión", "Agrupamiento (Clustering)"], 
+                    horizontal=True)
+    
+    modelos = ALL_MODELS.get(tipo, [])
+    st.session_state.selected_models = st.multiselect(
+        f"Seleccione modelos de {tipo}:",
+        modelos,
+        default=[m for m in st.session_state.selected_models if m in modelos]
+    )
 
 def render_parameters():
-    """Renderiza parámetros de modelos seleccionados"""
-    if df is None or not st.session_state.get("selected_models"):
-        st.warning("⚠️ Selecciona modelos primero"); return
-    for model in st.session_state.selected_models:
-        with st.expander(f"⚙️ {model}", expanded=False):
-            for pname, cfg in MODEL_PARAMS.get(model, {}).get("basic", {}).items():
-                key = f"{model}_{pname}"
-                if cfg["type"] == "int":
-                    st.slider(pname, cfg["min"], cfg["max"], cfg["default"], key=key)
-                elif cfg["type"] == "float":
-                    st.slider(pname, cfg["min"], cfg["max"], float(cfg["default"]), key=key)
-                elif cfg["type"] == "categorical":
-                    st.selectbox(pname, cfg["options"], index=cfg["options"].index(cfg["default"]), key=key)
+    if df is None or not st.session_state.selected_models:
+        st.warning("⚠️ Seleccione modelos en la pestaña anterior")
+        return
+    
+    for m in st.session_state.selected_models:
+        with st.expander(f"⚙️ Configurar {m}", expanded=True):
+            p_cfg = MODEL_PARAMS.get(m, {}).get("basic", {})
+            for p, val in p_cfg.items():
+                k = f"{m}_{p}"
+                if val["type"] == "int":
+                    st.slider(p, val["min"], val["max"], val["default"], key=k)
+                elif val["type"] == "float":
+                    st.slider(p, float(val["min"]), float(val["max"]), float(val["default"]), key=k)
 
 def render_prediction():
-    """Renderiza entrenamiento y resultados"""
-    if df is None or not st.session_state.get("selected_models"):
-        st.warning("⚠️ Configura dataset y modelos primero"); return
-    if st.button("🚀 Entrenar modelos", type="primary", use_container_width=True):
-        with st.spinner("🔄 Procesando..."):
-            predictor = Predictor(df, st.session_state.selected_models, st.session_state)
-            results = predictor.train_all()
-            st.success("✅ Entrenamiento completado")
-            with st.expander("📊 Resultados detallados", expanded=True):
-                st.json(results)
+    if df is None or not st.session_state.selected_models:
+        st.error("❌ Configuración incompleta.")
+        return
+    
+    if st.button("🚀 Ejecutar Entrenamiento Final", type="primary", use_container_width=True):
+        with st.spinner("Aplicando perillaje y entrenando modelos..."):
+            pred = Predictor(df, st.session_state.selected_models, st.session_state)
+            res = pred.train_all()
+            st.success("✅ ¡Proceso finalizado!")
+            st.table(pd.DataFrame(res).T)
 
-# ─── SIDEBAR ─────────────────────────────────────────────────────────────────
+# ─── SIDEBAR Y RUTEO ─────────────────────────────────────────────────────────
 with st.sidebar:
-    st.title(" Bienvenidos al portal")
-    st.markdown("Predicción de Deserción de Clientes (Churn) Machine Learning")
+    st.title("Lead University")
+    st.caption("BCD 7213 - Minería Avanzada")
     st.divider()
     
-    if st.button("🆕 Nuevo Dataset", use_container_width=True):
+    menu = st.radio("Navegación", 
+                    ["📊 EDA & Minería", "🤖 Selección de Modelos", "⚙️ Perillaje", "📈 Resultados"])
+    
+    st.divider()
+    if st.button("🆕 Cargar Nuevo Dataset", use_container_width=True):
         st.session_state.show_new_dataset_modal = True
-    
-    st.divider()
-    menu = st.radio("🧭 Navegación", ["📊 EDA", "🤖 Modelos", "⚙️ Parámetros", "📈 Predicción"], label_visibility="collapsed")
-    st.divider()
-    render_dataset_info(df)
 
-# ─── MODAL CARGA DATASET ─────────────────────────────────────────────────────
+# Lógica de pantallas
+if menu == "📊 EDA & Minería":
+    render_eda(df)
+elif menu == "🤖 Selección de Modelos":
+    render_model_selection()
+elif menu == "⚙️ Perillaje":
+    render_parameters()
+elif menu == "📈 Resultados":
+    render_prediction()
+
+# Modal de carga (se activa por el botón del sidebar)
 if st.session_state.show_new_dataset_modal:
-    st.markdown("<div style='position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:999'></div>", unsafe_allow_html=True)
+    st.markdown("---")
     with st.container():
-        col1, col2, col3 = st.columns([1,2,1])
-        with col2:
-            st.markdown("<div style='background:white;padding:20px;border-radius:10px;box-shadow:0 4px 12px rgba(0,0,0,0.15)'>", unsafe_allow_html=True)
-            st.subheader("📂 Cargar Dataset")
-            st.warning("⚠️ Esto reiniciará el análisis actual")
-            new_file = st.file_uploader("Selecciona CSV", type=["csv"], key="modal_uploader")
-            c1, c2 = st.columns(2)
-            if c1.button("✅ Aceptar", use_container_width=True): load_new_dataset(new_file)
-            if c2.button("❌ Cancelar", use_container_width=True): 
-                st.session_state.show_new_dataset_modal = False; st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-
-# ─── CONTENIDO PRINCIPAL ─────────────────────────────────────────────────────
-st.title(f"{menu}")
-match menu:
-    case "📊 EDA": render_eda(df)
-    case "🤖 Modelos": render_model_selection()
-    case "⚙️ Parámetros": render_parameters()
-    case "📈 Predicción": render_prediction()
+        st.subheader("📂 Cambiar Dataset")
+        nuevo = st.file_uploader("Seleccione nuevo archivo CSV", type=["csv"], key="modal_up")
+        col1, col2 = st.columns(2)
+        if col1.button("Confirmar Carga", type="primary"):
+            load_new_dataset(nuevo)
+        if col2.button("Cancelar"):
+            st.session_state.show_new_dataset_modal = False
+            st.rerun()

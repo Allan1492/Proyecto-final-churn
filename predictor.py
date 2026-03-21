@@ -1,7 +1,10 @@
-from sklearn.linear_model import LogisticRegression, LinearRegression
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, mean_squared_error
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
+from xgboost import XGBClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.metrics import accuracy_score, roc_auc_score
 import pandas as pd 
 
 class Predictor:
@@ -11,43 +14,70 @@ class Predictor:
         self.params = params
 
     def train_all(self):
-        # 1. TRUCO MÁGICO: Convertir texto a números (Encoding)
-        # pd.get_dummies convierte 'Female'/'Male' en 0s y 1s automáticamente
+        # 1. Encoding automático (Importante para datos de Churn con texto)
         df_numerico = pd.get_dummies(self.df, drop_first=True)
-
-        # 2. Ahora sí, separamos usando el nuevo dataframe numérico
         X = df_numerico.iloc[:, :-1]
         y = df_numerico.iloc[:, -1]
 
         X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42 # Agregamos random_state para que sea estable
+            X, y, test_size=0.2, random_state=42
         )
 
         resultados = {}
-        # ... resto de tu código (for model_name in self.models, etc.)
 
         for model_name in self.models:
-
+            # --- Diccionario de Hiperparámetros Dinámico ---
+            # Esto busca en el session_state usando el nombre del modelo como prefijo
+            
             if model_name == "Logistic Regression":
                 model = LogisticRegression(
-                    C=self.params.get("C", 1.0),
-                    max_iter=self.params.get("max_iter", 100)
+                    C=self.params.get(f"{model_name}_C", 1.0),
+                    max_iter=int(self.params.get(f"{model_name}_max_iter", 100))
                 )
-                model.fit(X_train, y_train)
-                pred = model.predict(X_test)
-                resultados[model_name] = {
-                    "accuracy": accuracy_score(y_test, pred)
-                }
 
             elif model_name == "Random Forest Classifier":
                 model = RandomForestClassifier(
-                    n_estimators=self.params.get("n_estimators", 100),
-                    max_depth=self.params.get("max_depth", 10)
+                    n_estimators=int(self.params.get(f"{model_name}_n_estimators", 100)),
+                    max_depth=int(self.params.get(f"{model_name}_max_depth", 10)),
+                    min_samples_split=int(self.params.get(f"{model_name}_min_samples_split", 2)),
+                    random_state=42
                 )
-                model.fit(X_train, y_train)
-                pred = model.predict(X_test)
-                resultados[model_name] = {
-                    "accuracy": accuracy_score(y_test, pred)
-                }
+
+            elif model_name == "XGBoost Classifier":
+                model = XGBClassifier(
+                    n_estimators=int(self.params.get(f"{model_name}_n_estimators", 100)),
+                    learning_rate=self.params.get(f"{model_name}_learning_rate", 0.1),
+                    max_depth=int(self.params.get(f"{model_name}_max_depth", 6)),
+                    use_label_encoder=False,
+                    eval_metric='logloss'
+                )
+
+            elif model_name == "SVM":
+                model = SVC(
+                    C=self.params.get(f"{model_name}_C", 1.0),
+                    kernel=self.params.get(f"{model_name}_kernel", "rbf"),
+                    probability=True # Necesario para calcular AUC
+                )
+
+            elif model_name == "KNN Classifier":
+                model = KNeighborsClassifier(
+                    n_neighbors=int(self.params.get(f"{model_name}_n_neighbors", 5))
+                )
+            
+            else:
+                continue # Si el modelo no está mapeado, se salta
+
+            # --- Proceso de Entrenamiento y Evaluación ---
+            model.fit(X_train, y_train)
+            pred = model.predict(X_test)
+            
+            # Cálculo de AUC (Probabilidades)
+            prob = model.predict_proba(X_test)[:, 1] if hasattr(model, "predict_proba") else pred
+            
+            resultados[model_name] = {
+                "Accuracy": f"{accuracy_score(y_test, pred):.4f}",
+                "AUC (ROC)": f"{roc_auc_score(y_test, prob):.4f}",
+                "CV Stability": f"{cross_val_score(model, X, y, cv=5).mean():.4f}"
+            }
 
         return resultados
