@@ -1,53 +1,22 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+from models import ALL_MODELS, MODEL_PARAMS
 
-# --- 1. CONFIGURACIÓN DE MODELOS Y PARÁMETROS ---
-MODEL_PARAMS = {
-    "Random Forest Classifier": {
-        "basic": {
-            "n_estimators": {"type": "int", "min": 10, "max": 500, "default": 100},
-            "max_depth": {"type": "int", "min": 2, "max": 15, "default": 6},
-            "min_samples_split": {"type": "int", "min": 2, "max": 10, "default": 2},
-            "criterion": {"type": "choice", "options": ["gini", "entropy"], "default": "gini"}
-        }
-    },
-    "Logistic Regression": {
-        "basic": {
-            "C": {"type": "float", "min": 0.01, "max": 10.0, "default": 1.0},
-            "max_iter": {"type": "int", "min": 100, "max": 500, "default": 100}
-        }
-    },
-    "XGBoost Classifier": {
-        "basic": {
-            "learning_rate": {"type": "float", "min": 0.01, "max": 0.3, "default": 0.1},
-            "n_estimators": {"type": "int", "min": 50, "max": 300, "default": 100},
-            "max_depth": {"type": "int", "min": 2, "max": 10, "default": 4}
-        }
-    },
-    "SVM": {
-        "basic": {
-            "C": {"type": "float", "min": 0.1, "max": 5.0, "default": 1.0},
-            "kernel": {"type": "choice", "options": ["linear", "rbf", "poly"], "default": "rbf"}
-        }
-    },
-    "KNN Classifier": {
-        "basic": {
-            "n_neighbors": {"type": "int", "min": 1, "max": 30, "default": 5}
-        }
-    }
-}
 
 # Importación de módulos locales
 from eda import VisualizationService
 from supervisado import ModelosClasificacion
-from no_supervisado import SegmentadorClientes, DetectorFraude
+from no_supervisado import AnalisisSegmentacion, AnalisisAnomalias
 
 # --- 2. CONFIGURACIÓN DE INTERFAZ ---
-st.set_page_config(page_title="Minería Avanzada | Alan Montes", layout="wide", page_icon="📊")
+st.set_page_config(page_title="Minería Avanzada", layout="wide", page_icon="📊")
 
 st.markdown("<h1 style='text-align: center;'>🚀 Framework de Minería de Datos Avanzada</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center;'>Desarrollado por: <b>Alan Montes</b> | LEAD University</p>", unsafe_allow_html=True)
+st.markdown(
+    "<p style='text-align: center;'>Analisis Predictivo de la Desercion de Clientes mediante Modelos de Clasificacion y Series Temporales | LEAD University</p>", 
+    unsafe_allow_html=True
+)
 st.divider()
 
 # --- 3. GESTIÓN DE ESTADO Y DATOS ---
@@ -156,7 +125,7 @@ else:
                     # Comparativa de Estabilidad
                     if mejor_mod_obj:
                         st.divider()
-                        st.subheader(f"⚖️ Estabilidad del Ganador: {nombre_ganador}")
+                        st.subheader(f" Estabilidad del Ganador: {nombre_ganador}")
                         
                         cv_res = sup.ejecutar_validacion_cruzada(mejor_mod_obj, cv=5)
                         

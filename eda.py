@@ -30,7 +30,7 @@ class AgrupamientoYSeries(EDAService):
 
         result = seasonal_decompose(df_ts, period=periodo)
         
-        # Identificación de día crítico (Traducción lógica)
+       
         dias_es = {'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles', 
                    'Thursday': 'Jueves', 'Friday': 'Viernes', 'Saturday': 'Sábado', 'Sunday': 'Domingo'}
         seasonal_df = pd.DataFrame({'s': result.seasonal})

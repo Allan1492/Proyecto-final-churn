@@ -1,3 +1,5 @@
+# models.py
+
 ALL_MODELS = {
     "Clasificación": [
         "Logistic Regression", 
@@ -19,7 +21,6 @@ ALL_MODELS = {
     ]
 }
 
-
 MODEL_PARAMS = {
     "Logistic Regression": {
         "basic": {
@@ -30,7 +31,7 @@ MODEL_PARAMS = {
     "Random Forest Classifier": {
         "basic": {
             "n_estimators": {"type": "int", "min": 10, "max": 1000, "default": 100},
-            "max_depth": {"type": "int", "min": 2, "max": 100, "default": 10},
+            "max_depth": {"type": "int", "min": 2, "max": 50, "default": 10},
             "min_samples_split": {"type": "int", "min": 2, "max": 20, "default": 2},
             "criterion": {"type": "choice", "options": ["gini", "entropy"], "default": "gini"}
         }
@@ -39,7 +40,10 @@ MODEL_PARAMS = {
         "basic": {
             "learning_rate": {"type": "float", "min": 0.01, "max": 0.3, "default": 0.1},
             "n_estimators": {"type": "int", "min": 50, "max": 500, "default": 100},
-            "max_depth": {"type": "int", "min": 2, "max": 20, "default": 6}
+            "max_depth": {"type": "int", "min": 2, "max": 20, "default": 4}, # Ajustado a 4
+            "gamma": {"type": "float", "min": 0.0, "max": 2.0, "default": 0.1}, # Nuevo: Regularización
+            "subsample": {"type": "float", "min": 0.1, "max": 1.0, "default": 0.9}, # Nuevo: Muestreo
+            "colsample_bytree": {"type": "float", "min": 0.1, "max": 1.0, "default": 0.8} # Nuevo: Muestreo columnas
         }
     },
     "SVM": {
