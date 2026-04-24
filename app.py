@@ -1,25 +1,29 @@
+
 import streamlit as st
 import pandas as pd
 import numpy as np
 from models import ALL_MODELS, MODEL_PARAMS
-
-
-# Importación de módulos locales
 from eda import VisualizationService
 from supervisado import ModelosClasificacion
-from no_supervisado import AnalisisSegmentacion, AnalisisAnomalias
+from no_supervisado import AnalisisSegmentacion, AnalisisAnomalias, ReglasAsociacion
 
-# --- 2. CONFIGURACIÓN DE INTERFAZ ---
 st.set_page_config(page_title="Minería Avanzada", layout="wide", page_icon="📊")
 
-st.markdown("<h1 style='text-align: center;'>🚀 Framework de Minería de Datos Avanzada</h1>", unsafe_allow_html=True)
+def load_css(file_path):
+    with open(file_path, "r", encoding="utf-8") as f:
+        css_content = f.read()
+    st.markdown(f"<style>{css_content}</style>", unsafe_allow_html=True)
+load_css("style.css")
+
+
+
+st.markdown("<h1 style='text-align: center;'> Framework de Minería de Datos Avanzada</h1>", unsafe_allow_html=True)
 st.markdown(
     "<p style='text-align: center;'>Analisis Predictivo de la Desercion de Clientes mediante Modelos de Clasificacion y Series Temporales | LEAD University</p>", 
     unsafe_allow_html=True
 )
 st.divider()
 
-# --- 3. GESTIÓN DE ESTADO Y DATOS ---
 if 'df' not in st.session_state:
     st.session_state.df = None
 
@@ -65,8 +69,7 @@ else:
             st.warning("No hay columnas numéricas suficientes.")
 
     elif menu == "2. Supervisado":
-        st.header("🤖 Laboratorio de Modelado (Meta 1)")
-        
+                
         target = st.selectbox("Seleccione Variable Objetivo (Target)", df.columns, index=len(df.columns)-1)
         
         st.sidebar.subheader("⚙️ Configuración de Algoritmos")
@@ -89,7 +92,7 @@ else:
                     params_del_modelo[p_name] = st.sidebar.selectbox(p_name, p_details["options"], index=p_details["options"].index(p_details["default"]), key=ukey)
             dict_hiperparametros[m_name] = params_del_modelo
 
-        if st.button("🚀 Iniciar Entrenamiento Masivo"):
+        if st.button(" Iniciar Entrenamiento Masivo"):
             with st.spinner("Entrenando modelos y evaluando estabilidad..."):
                 try:
                     sup = ModelosClasificacion(df, target)
@@ -119,13 +122,13 @@ else:
                             nombre_ganador = m_name
 
                     # Resultados en tabla
-                    st.subheader("📊 Comparativa de Rendimiento (Test Set)")
+                    st.subheader(" Comparativa de Rendimiento (Test Set)")
                     st.table(pd.DataFrame(resultados).set_index("Algoritmo"))
 
                     # Comparativa de Estabilidad
                     if mejor_mod_obj:
                         st.divider()
-                        st.subheader(f" Estabilidad del Ganador: {nombre_ganador}")
+                        st.subheader(f"📊 Estabilidad del Ganador: {nombre_ganador}")
                         
                         cv_res = sup.ejecutar_validacion_cruzada(mejor_mod_obj, cv=5)
                         
@@ -156,31 +159,62 @@ else:
         col_v = c2.selectbox("Métrica a Analizar", df.columns)
         periodo = st.slider("Periodo de Estacionalidad", 2, 30, 7)
         
-        if st.button("🔍 Descomponer Serie"):
+        if st.button(" Descomponer Serie"):
             fig, dia = viz.obtener_descomposicion_plotly(col_f, col_v, periodo)
             if fig:
                 st.success(f"Día con Mayor Tendencia Detectado: **{dia}**")
                 st.plotly_chart(fig, use_container_width=True)
 
     elif menu == "4. No Supervisado (Clustering)":
-        st.header("🧪 Segmentación y Detección de Anomalías")
-        tab1, tab2 = st.tabs(["K-Means (Segmentación)", "Isolation Forest (Anomalías)"])
+        st.header(" Segmentación, Anomalías y Asociación")
+        
+        # 1. Definición de pestañas (Tabs)
+        tab1, tab2 = st.tabs([
+            "K-Means (Segmentación)", 
+            "Reglas de Asociación"
+        ])
         
         with tab1:
             k = st.slider("Número de Clústeres (K)", 2, 8, 3)
-            if st.button("Generar Segmentos"):
-                seg = SegmentadorClientes(df)
-                df_res = seg.generar_clusters(k)
-                st.write("Vista previa de segmentos:")
-                st.dataframe(df_res.head(10))
+            if st.button("Ejecutar Clustering"):
+                try:
+                    seg = AnalisisSegmentacion(df) 
+                    df_res, modelo = seg.ejecutar_kmeans(k)
+                    st.success(f"Segmentación completada para K={k}")
+                    st.dataframe(df_res.head(10))
+                except Exception as e:
+                    st.error(f"Error en Clustering: {e}")
                 
+
         with tab2:
-            contam = st.slider("Ratio de Contaminación", 0.01, 0.15, 0.05)
-            if st.button("Ejecutar Detección"):
-                det = DetectorFraude(df)
-                df_anom = det.detectar_anomalias(contam)
-                n_anom = len(df_anom[df_anom['Es_Anomalia'] == -1])
-                st.warning(f"Se identificaron {n_anom} anomalías.")
+            st.subheader(" Análisis de Afinidad (Market Basket)")
+            st.write("Descubre qué servicios de Tico Mart suelen contratarse juntos.")
+            
+            # Sliders para ajustar el algoritmo Apriori
+            c_a, c_b = st.columns(2)
+            soporte = c_a.slider("Soporte Mínimo", 0.01, 0.5, 0.05)
+            confianza = c_b.slider("Confianza Mínima", 0.1, 1.0, 0.5)
+            
+            if st.button("Generar Reglas"):
+                with st.spinner("Calculando asociaciones..."):
+                    try:
+                        # Instancia de la nueva clase que agregamos
+                        asociador = ReglasAsociacion(df)
+                        reglas = asociador.generar_reglas_asociacion(soporte, confianza)
+                        
+                        if not reglas.empty:
+                            st.success(f"Se detectaron {len(reglas)} reglas significativas.")
+                            
+                            reglas_viz = reglas.copy()
+                            reglas_viz['antecedents'] = reglas_viz['antecedents'].apply(lambda x: ', '.join(list(x)))
+                            reglas_viz['consequents'] = reglas_viz['consequents'].apply(lambda x: ', '.join(list(x)))
+                            
+                            st.dataframe(reglas_viz.style.background_gradient(subset=['lift'], cmap='YlGn'))
+                        else:
+                            st.warning("No se encontraron reglas con esos parámetros. Intenta bajar el Soporte.")
+                    except Exception as e:
+                        st.error(f"Error en Reglas: {e}")
+                        st.info("Asegúrate de haber instalado mlxtend con: pip install mlxtend")
 
 # --- 5. ACCIONES ---
 if st.sidebar.button("🗑️ Reiniciar Sesión"):

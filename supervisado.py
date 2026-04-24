@@ -3,26 +3,18 @@ import numpy as np
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.metrics import (accuracy_score, precision_score, recall_score, f1_score, 
-                             mean_squared_error, r2_score, mean_absolute_error)
+                             roc_auc_score, mean_squared_error, r2_score, mean_absolute_error)
 
-# Modelos de Clasificación (Tema 3 del Sílabo)
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neural_network import MLPClassifier 
 from xgboost import XGBClassifier
-
-# Redes Neuronales Artificiales (Contenido Avanzado - Tema 3)
-from sklearn.neural_network import MLPClassifier
-
-# Modelos de Regresión (Tema 4 del Sílabo)
 from sklearn.linear_model import LinearRegression
 
 class MineriaSupervisada:
-    """
-    Clase Base: Documenta la fase de Preprocesamiento y Limpieza.
-    Asegura que todos los modelos utilicen datos estandarizados y sin fuga.
-    """
+   
     def __init__(self, df):
         self.df = df.copy()
         self.X_train, self.X_test, self.y_train, self.y_test = None, None, None, None
@@ -31,7 +23,6 @@ class MineriaSupervisada:
     def _limpiar_fuga_datos(self, df_input):
         """
         Elimina variables que causan Data Leakage y IDs.
-        Crucial para la validez técnica del proyecto.
         """
         columnas_a_eliminar = [
             'CustomerID', 'Fecha_Interaccion', 'Fecha_Inicio_Contrato', 
@@ -58,68 +49,68 @@ class ModelosClasificacion(MineriaSupervisada):
         X = df_ml.drop(columns=[self.target])
         X = pd.get_dummies(X, drop_first=True)
 
-        # Codificación de etiquetas (Churn/No Churn -> 0/1)
+       
         le_target = LabelEncoder()
         y = le_target.fit_transform(df_ml[self.target].astype(str))
 
-        # Split estratificado
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
             X, y, test_size=0.2, random_state=42, stratify=y
         )
 
-        # Escalado (Esencial para Logística, SVM, KNN y Redes Neuronales)
+        
         self.X_train = self.scaler.fit_transform(self.X_train)
         self.X_test = self.scaler.transform(self.X_test)
 
     def obtener_metricas_finales(self, modelo):
-        """Calcula el rendimiento del modelo en el conjunto de prueba."""
+        """Calcula el rendimiento del modelo en el conjunto de prueba, incluyendo AUC."""
         preds = modelo.predict(self.X_test)
+        
+        
+        if hasattr(modelo, "predict_proba"):
+            probs = modelo.predict_proba(self.X_test)[:, 1]
+        else:
+            
+            probs = preds 
+
         return {
             "Accuracy": round(accuracy_score(self.y_test, preds), 4),
             "Precision": round(precision_score(self.y_test, preds, zero_division=0), 4),
             "Recall": round(recall_score(self.y_test, preds, zero_division=0), 4),
-            "F1-Score": round(f1_score(self.y_test, preds, zero_division=0), 4)
+            "F1-Score": round(f1_score(self.y_test, preds, zero_division=0), 4), # Se agregó coma faltante
+            "AUC-ROC": round(roc_auc_score(self.y_test, probs), 4) # Ahora 'probs' sí existe
         }
 
-    # --- MÉTODOS DE ENTRENAMIENTO FLEXIBLES (**kwargs) ---
-
     def ejecutar_rf(self, **kwargs):
-        """Tema: Random Forest (Bagging). Soporta n_estimators, max_depth, min_samples_split, etc."""
         model = RandomForestClassifier(**kwargs, random_state=42)
         return model.fit(self.X_train, self.y_train)
 
     def ejecutar_xgb(self, **kwargs):
-        """Tema: XGBoost (Boosting). Soporta learning_rate, gamma, subsample, etc."""
-        # Se asegura de incluir parámetros de seguridad para XGBoost
-        params = {'random_state': 42, 'eval_metric': 'logloss', 'use_label_encoder': False}
+        params = {'random_state': 42, 'eval_metric': 'logloss'}
         params.update(kwargs)
         model = XGBClassifier(**params)
         return model.fit(self.X_train, self.y_train)
 
     def ejecutar_red_neuronal(self, **kwargs):
-        """Tema: Redes Neuronales (MLP). Soporta hidden_layer_sizes, activation, max_iter."""
+        
         params = {'random_state': 42, 'max_iter': 500}
         params.update(kwargs)
         model = MLPClassifier(**params)
         return model.fit(self.X_train, self.y_train)
 
     def ejecutar_logistica(self, **kwargs):
-        """Tema: Regresión Logística. Soporta C, penalty, solver."""
         model = LogisticRegression(**kwargs, random_state=42)
         return model.fit(self.X_train, self.y_train)
 
     def ejecutar_svm(self, **kwargs):
-        """Tema: SVM. Soporta C, kernel, gamma."""
+        
         model = SVC(**kwargs, probability=True, random_state=42)
         return model.fit(self.X_train, self.y_train)
 
     def ejecutar_knn(self, **kwargs):
-        """Tema: KNN. Soporta n_neighbors, weights."""
         model = KNeighborsClassifier(**kwargs)
         return model.fit(self.X_train, self.y_train)
     
     def ejecutar_validacion_cruzada(self, modelo, cv=5):
-        """Tema: Validación de Modelos (K-Fold Cross Validation)."""
         scores = cross_val_score(modelo, self.X_train, self.y_train, cv=cv, scoring='roc_auc')
         return {
             "AUC_Promedio": round(scores.mean(), 4),
@@ -147,30 +138,13 @@ class ModelosRegresion(MineriaSupervisada):
         self.X_test = self.scaler.transform(self.X_test)
 
     def ejecutar_lineal(self):
-        """Regresión Lineal Múltiple."""
         model = LinearRegression()
         return model.fit(self.X_train, self.y_train)
 
     def obtener_metricas_regresion(self, modelo):
-        """Métricas de error para variables continuas."""
         preds = modelo.predict(self.X_test)
         return {
             "R2_Score": round(r2_score(self.y_test, preds), 4),
             "MAE": round(mean_absolute_error(self.y_test, preds), 4),
             "MSE": round(mean_squared_error(self.y_test, preds), 4)
         }
-
-class AnalisisTemporal:
-    """
-    Documenta el TEMA 5: Introducción a las Series Temporales.
-    """
-    def __init__(self, df, col_fecha, col_valor):
-        self.df = df.copy()
-        self.col_fecha = col_fecha
-        self.col_valor = col_valor
-
-    def generar_serie_agregada(self, frecuencia='M'):
-        """Transforma datos a formato de serie de tiempo."""
-        self.df[self.col_fecha] = pd.to_datetime(self.df[self.col_fecha])
-        serie = self.df.set_index(self.col_fecha)[self.col_valor].resample(frecuencia).sum()
-        return serie

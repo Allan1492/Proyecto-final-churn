@@ -4,12 +4,11 @@ from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import roc_auc_score, classification_report
 
-# Modelos
+
 from xgboost import XGBClassifier
 from sklearn.ensemble import RandomForestClassifier
 
 def optimizacion_profunda():
-    # 1. Carga y limpieza 
     try:
         df = pd.read_csv('Dataset_Churn.csv')
     except FileNotFoundError:
@@ -22,7 +21,7 @@ def optimizacion_profunda():
     ]
     df_ml = df.drop(columns=[c for c in columnas_fuga if c in df.columns])
     
-    # 2. Preparación
+   
     target = 'Churn'
     X = pd.get_dummies(df_ml.drop(columns=[target]), drop_first=True)
     y = pd.get_dummies(df_ml[target], drop_first=True).iloc[:, 0] if df_ml[target].dtype == 'object' else df_ml[target]
@@ -33,7 +32,7 @@ def optimizacion_profunda():
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
 
-    # 3. ESPACIO DE BÚSQUEDA PROFUNDO
+    
    
     modelos_config = {
         'XGBoost_Deep': {
@@ -53,7 +52,7 @@ def optimizacion_profunda():
     print("Esto puede tardar unos minutos debido al volumen de combinaciones...")
 
     for nombre, config in modelos_config.items():
-        # Usamos cv=5 para una validación más robusta que la anterior
+        
         grid = GridSearchCV(
             config['model'], 
             config['params'], 

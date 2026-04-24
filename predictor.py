@@ -5,6 +5,7 @@ from xgboost import XGBClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import accuracy_score, roc_auc_score
+from sklearn.metrics import precision_score, recall_score, f1_score
 import pandas as pd 
 
 class Predictor:
@@ -14,7 +15,6 @@ class Predictor:
         self.params = params
 
     def train_all(self):
-        # 1. Encoding automático (Importante para datos de Churn con texto)
         df_numerico = pd.get_dummies(self.df, drop_first=True)
         X = df_numerico.iloc[:, :-1]
         y = df_numerico.iloc[:, -1]
@@ -26,8 +26,7 @@ class Predictor:
         resultados = {}
 
         for model_name in self.models:
-            # --- Diccionario de Hiperparámetros Dinámico ---
-            # Esto busca en el session_state usando el nombre del modelo como prefijo
+         
             
             if model_name == "Logistic Regression":
                 model = LogisticRegression(
@@ -65,13 +64,13 @@ class Predictor:
                 )
             
             else:
-                continue # Si el modelo no está mapeado, se salta
+                continue 
 
-            # --- Proceso de Entrenamiento y Evaluación ---
+            
             model.fit(X_train, y_train)
             pred = model.predict(X_test)
             
-            # Cálculo de AUC (Probabilidades)
+            
             prob = model.predict_proba(X_test)[:, 1] if hasattr(model, "predict_proba") else pred
             
             resultados[model_name] = {

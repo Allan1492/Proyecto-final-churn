@@ -1,94 +1,160 @@
 import pandas as pd
 import numpy as np
-from sklearn.cluster import KMeans, DBSCAN, AgglomerativeClustering
-from sklearn.ensemble import IsolationForest
-from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA
+from mlxtend.frequent_patterns import apriori, association_rules
+from mlxtend.preprocessing import TransactionEncoder
 
-class MineriaNoSupervisada:
-    """
-    Clase Base que documenta el Aprendizaje No Supervisado.
-    Tema 1 y 2 del Sílabo: Descubrimiento de patrones y reducción de complejidad.
-    """
+class AnalisisSegmentacion:
+    """Clase para análisis de clustering con K-Means"""
+    
     def __init__(self, df):
         self.df = df.copy()
-        # Filtramos solo datos numéricos para algoritmos de distancia
-        self.numeric_data = self.df.select_dtypes(include=['number']).fillna(0)
-        self.scaler = StandardScaler()
-        self.data_scaled = None
+        
+    def ejecutar_kmeans(self, k=3):
+        from sklearn.cluster import KMeans
+        from sklearn.preprocessing import StandardScaler
+        
+        
+        df_num = self.df.select_dtypes(include=[np.number])
+        
+        
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(df_num.dropna())
+        
+        
+        kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+        clusters = kmeans.fit_predict(X_scaled)
+        
+        
+        df_result = self.df.iloc[:len(clusters)].copy()
+        df_result['Cluster'] = clusters
+        
+        return df_result, kmeans
 
-    def _escalar_datos(self):
-        """Preprocesamiento esencial para algoritmos basados en distancias (K-Means, PCA)."""
-        self.data_scaled = self.scaler.fit_transform(self.numeric_data)
-        return self.data_scaled
 
-class AnalisisSegmentacion(MineriaNoSupervisada):
-    """
-    Documenta el TEMA 1: Algoritmos de Agrupamiento (Clustering).
-    Incluye métodos de particionamiento, jerárquicos y basados en densidad.
-    """
+class AnalisisAnomalias:
+    """Clase para detección de anomalías con Isolation Forest"""
     
-    def ejecutar_kmeans(self, n_clusters=3):
-        """Tema: K-Means (Algoritmos de Particionamiento)"""
-        data = self._escalar_datos()
-        model = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-        self.df['Segmento_KMeans'] = model.fit_predict(data)
-        return self.df, model
-
-    def ejecutar_dbscan(self, eps=0.5, min_samples=5):
-        """Tema: DBSCAN (Algoritmos basados en densidad)"""
-        data = self._escalar_datos()
-        model = DBSCAN(eps=eps, min_samples=min_samples)
-        self.df['Segmento_DBSCAN'] = model.fit_predict(data)
-        return self.df
-
-    def ejecutar_jerarquico(self, n_clusters=3):
-        """Tema: Clustering Jerárquico (Agglomerative)"""
-        data = self._escalar_datos()
-        model = AgglomerativeClustering(n_clusters=n_clusters)
-        self.df['Segmento_Jerarquico'] = model.fit_predict(data)
-        return self.df
-
-class ReduccionDimensionalidad(MineriaNoSupervisada):
-    """
-    Documenta el TEMA 2: Reducción de Dimensionalidad.
-    """
-    def ejecutar_pca(self, n_components=2):
-        """
-        Tema: Análisis de Componentes Principales (PCA).
-        Transforma el espacio de características para visualización o eficiencia.
-        """
-        data = self._escalar_datos()
-        pca = PCA(n_components=n_components)
-        componentes = pca.fit_transform(data)
+    def __init__(self, df):
+        self.df = df.copy()
         
-        columnas_pca = [f'PC{i+1}' for i in range(n_components)]
-        df_pca = pd.DataFrame(data=componentes, columns=columnas_pca)
+    def detectar_isolation_forest(self, contamination=0.05):
+        from sklearn.ensemble import IsolationForest
+        from sklearn.preprocessing import StandardScaler
         
-        # Retornamos la varianza explicada para documentar la pérdida de información
-        varianza = pca.explained_variance_ratio_
-        return df_pca, varianza
+        
+        df_num = self.df.select_dtypes(include=[np.number])
+        
+        
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(df_num.dropna())
+        
+        
+        iso = IsolationForest(contamination=contamination, random_state=42)
+        predicciones = iso.fit_predict(X_scaled)
+        
+        df_result = self.df.iloc[:len(predicciones)].copy()
+        df_result['Es_Anomalia'] = predicciones
+        
+        return df_result
 
-class AnalisisAnomalias(MineriaNoSupervisada):
-    """
-    Documenta técnicas de detección de Outliers (Anomalías).
-    Tema transversal en Minería de Datos para limpieza y seguridad.
-    """
-    def detectar_isolation_forest(self, contaminacion=0.05):
-        """Algoritmo basado en árboles para identificar puntos aislados."""
-        iso = IsolationForest(contamination=contaminacion, random_state=42)
-        # -1 es anomalía, 1 es normal
-        self.df['Es_Anomalia'] = iso.fit_predict(self.numeric_data)
-        return self.df
 
 class ReglasAsociacion:
     """
-    Documenta el TEMA: Análisis de Afinidad (Market Basket Analysis).
-    Reservado para futuras implementaciones de algoritmos como Apriori.
+    Clase para análisis de reglas de asociación (Algoritmo Apriori)
+    Ideal para Market Basket Analysis
     """
-    def __init__(self, df):
-        self.df = df
     
-    def ejecutar_apriori(self):
-        """Espacio para documentar el análisis de reglas de asociación."""
-        pass
+    def __init__(self, df):
+        """
+        Inicializa la clase con el DataFrame
+        df: DataFrame con datos transaccionales o binarios
+        """
+        self.df = df.copy()
+        self.df_binario = None
+        
+    def _preparar_datos_binarios(self, columnas_categoricas=None):
+        """
+        Convierte datos categóricos a formato binario para Apriori
+        """
+        if columnas_categoricas is None:
+            columnas_categoricas = self.df.select_dtypes(include=['object', 'category']).columns.tolist()
+        
+        if not columnas_categoricas:
+            
+            columnas_numericas = self.df.select_dtypes(include=[np.number]).columns.tolist()
+            if columnas_numericas:
+                self.df_binario = (self.df[columnas_numericas] > self.df[columnas_numericas].median()).astype(int)
+                return self.df_binario
+        
+        
+        try:
+            
+            transacciones = []
+            for _, row in self.df[columnas_categoricas].iterrows():
+                items = [str(val) for val in row.dropna().unique() if pd.notna(val)]
+                if items:
+                    transacciones.append(items)
+            
+            if transacciones:
+                te = TransactionEncoder()
+                te_ary = te.fit(transacciones).transform(transacciones)
+                self.df_binario = pd.DataFrame(te_ary, columns=te.columns_)
+                return self.df_binario
+        except:
+            pass
+        
+        
+        self.df_binario = pd.get_dummies(self.df[columnas_categoricas])
+        return self.df_binario
+    
+    def generar_reglas_asociacion(self, soporte_min=0.05, confianza_min=0.5, metrica='lift'):
+        
+        if self.df_binario is None:
+            self._preparar_datos_binarios()
+        
+        if self.df_binario is None or self.df_binario.empty:
+            raise ValueError("No se pudieron preparar los datos para análisis de asociación. Verifica que el DataFrame tenga columnas categóricas o transaccionales.")
+        
+        
+        itemsets_frecuentes = apriori(
+            self.df_binario, 
+            min_support=soporte_min, 
+            use_colnames=True,
+            max_len=2  
+        )
+        
+        if itemsets_frecuentes.empty:
+          
+            return pd.DataFrame(columns=['antecedents', 'consequents', 'antecedent support', 
+                                       'consequent support', 'support', 'confidence', 'lift'])
+        
+        
+        reglas = association_rules(
+            itemsets_frecuentes, 
+            metric="confidence", 
+            min_threshold=confianza_min
+        )
+        
+        if not reglas.empty:
+          
+            if 'lift' not in reglas.columns:
+                reglas['lift'] = reglas['confidence'] / reglas['consequent support']
+            
+            
+            if metrica in reglas.columns:
+                reglas = reglas.sort_values(by=metrica, ascending=False)
+            
+            columnas_output = ['antecedents', 'consequents', 'support', 'confidence', 'lift']
+            columnas_existentes = [c for c in columnas_output if c in reglas.columns]
+            reglas = reglas[columnas_existentes]
+        
+        return reglas.reset_index(drop=True)
+    
+    def obtener_top_reglas(self, soporte_min=0.05, confianza_min=0.5, top_n=10):
+        """
+        Obtiene las N mejores reglas según lift
+        """
+        reglas = self.generar_reglas_asociacion(soporte_min, confianza_min)
+        if not reglas.empty and 'lift' in reglas.columns:
+            return reglas.head(top_n)
+        return reglas
